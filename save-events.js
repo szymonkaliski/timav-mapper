@@ -26,9 +26,13 @@ const updateEvent = ({ event, calendarId, auth, callback }) => {
 };
 
 const updateEvents = ({ auth, calendarId }) => {
+  let i = 0;
+  const count = updatedEvents.length;
+
   async.eachSeries(updatedEvents, (updatedEvent, callback) => {
     console.log(updatedEvent);
-    console.log();
+    console.log(`\n\t${i} / ${count}`);
+    i++;
 
     updateEvent({ event: updatedEvent, calendarId, auth, callback });
   });

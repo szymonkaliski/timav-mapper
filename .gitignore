@@ -2,7 +2,10 @@ node_modules
 
 .DS_Store
 
-events.json
-events-transformed.json
-client_secret.json
+events*.json
+*events.json
+events*.json*
+*events.json*
+
 .credentials.json
+client_secret.json

@@ -1,16 +1,16 @@
-const fs = require('fs');
-const google = require('googleapis');
+const fs = require("fs");
+const { google } = require("googleapis");
 
-const getAuth = require('./get-auth');
+const getAuth = require("./get-auth");
 
 const getEvents = ({ auth, calendarId, callback, pageToken }) => {
-  const calendar = google.calendar('v3');
+  const calendar = google.calendar("v3");
 
   const config = {
     calendarId,
     auth,
     maxResults: 100,
-    singleEvents: true
+    singleEvents: true,
   };
 
   if (pageToken) {
@@ -33,11 +33,11 @@ const getAllEvents = ({ auth, calendarId, callback, pageToken, allEvents }) => {
         process.exit(1);
       }
 
-      const nextAllEvents = allEvents.concat(response.items);
+      const nextAllEvents = allEvents.concat(response.data.items);
 
-      console.log('next page token', response.nextPageToken);
+      console.log("next page token", response.data.nextPageToken);
 
-      if (!response.nextPageToken) {
+      if (!response.data.nextPageToken) {
         return callback(null, nextAllEvents);
       }
 
@@ -45,10 +45,10 @@ const getAllEvents = ({ auth, calendarId, callback, pageToken, allEvents }) => {
         auth,
         calendarId,
         callback,
-        pageToken: response.nextPageToken,
-        allEvents: nextAllEvents
+        pageToken: response.data.nextPageToken,
+        allEvents: nextAllEvents,
       });
-    }
+    },
   });
 };
 
@@ -62,8 +62,12 @@ getAuth(({ auth, calendar }) => {
         process.exit(1);
       }
 
-      fs.writeFileSync('./events.json', JSON.stringify(events, null, 2), 'utf-8');
-      console.log('events saved to ./events.json');
-    }
+      fs.writeFileSync(
+        "./events.json",
+        JSON.stringify(events, null, 2),
+        "utf-8"
+      );
+      console.log("events saved to ./events.json");
+    },
   });
 });

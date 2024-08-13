@@ -9,38 +9,17 @@ if (!dataFile) {
 
 const data = require(dataFile);
 
-// transforming functions
-
-const transformCodeToLanguage = summary => {
-  return summary.replace("@language(", "@code(");
-};
-
-const transformWritingToJournal = summary => {
-  return summary.replace("@writing", "@journal");
-};
-
-const transformDesignToVisualDesign = summary => {
-  return summary.replace("@design", "@visual(design)");
-};
-
-
-// actual transformation
-
 const newData = data
-  .map(d => {
-    const oldSummary = d.summary;
+  .map((d) => {
+    if (d.description === undefined || d.description === "") {
+      return null;
+    }
 
-    // d.summary = transformCodeToLanguage(d.summary);
+    console.log(d.description);
 
-    d.summary = transformWritingToJournal(d.summary);
-    d.summary = transformDesignToVisualDesign(d.summary);
-
-    return d.summary !== oldSummary ? d : null;
+    return { ...d, description: "" };
   })
-  .filter(_ => _);
-
-
-// dump to file
+  .filter((_) => _);
 
 fs.writeFileSync(
   "./events-transformed.json",

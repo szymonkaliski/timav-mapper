@@ -1,38 +1,38 @@
-const fs = require('fs');
-const google = require('googleapis');
-const googleAuth = require('google-auth-library');
-const inquirer = require('inquirer');
-const readline = require('readline');
+const fs = require("fs");
+const { google } = require("googleapis");
+const { OAuth2Client } = require("google-auth-library");
+const { default: inquirer } = require("inquirer");
+const readline = require("readline");
 
-const prop = key => obj => obj[key];
+const prop = (key) => (obj) => obj[key];
 
-const SCOPES = ['https://www.googleapis.com/auth/calendar'];
-const TOKEN_PATH = '.credentials.json';
+const SCOPES = ["https://www.googleapis.com/auth/calendar"];
+const TOKEN_PATH = ".credentials.json";
 
-const storeToken = token => {
-  fs.writeFile(TOKEN_PATH, JSON.stringify(token));
-  console.log('Token stored to ' + TOKEN_PATH);
+const storeToken = (token) => {
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
+  console.log("Token stored to " + TOKEN_PATH);
 };
 
 const getNewToken = (oauth2Client, callback) => {
   const authUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: SCOPES
+    access_type: "offline",
+    scope: SCOPES,
   });
 
-  console.log('Authorize this app by visiting this url: ', authUrl);
+  console.log("Authorize this app by visiting this url: ", authUrl);
 
   const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
-  rl.question('Enter the code from that page here: ', code => {
+  rl.question("Enter the code from that page here: ", (code) => {
     rl.close();
 
     oauth2Client.getToken(code, (err, token) => {
       if (err) {
-        console.log('Error while trying to retrieve access token', err);
+        console.log("Error while trying to retrieve access token", err);
         return;
       }
       oauth2Client.credentials = token;
@@ -46,8 +46,8 @@ const authorize = (credentials, callback) => {
   const clientSecret = credentials.installed.client_secret;
   const clientId = credentials.installed.client_id;
   const redirectUrl = credentials.installed.redirect_uris[0];
-  const auth = new googleAuth();
-  const oauth2Client = new auth.OAuth2(clientId, clientSecret, redirectUrl);
+
+  const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUrl);
 
   fs.readFile(TOKEN_PATH, (err, token) => {
     if (err) {
@@ -60,7 +60,7 @@ const authorize = (credentials, callback) => {
 };
 
 const getCalendars = ({ auth, callback }) => {
-  const calendar = google.calendar('v3');
+  const calendar = google.calendar("v3");
 
   const config = { auth };
 
@@ -79,33 +79,35 @@ const chooseCalendar = ({ auth, callback }) => {
       inquirer
         .prompt([
           {
-            type: 'list',
-            name: 'calendar',
-            message: 'Which calendar has Timav tracking data?',
-            choices: list.items.map(prop('summary'))
-          }
+            type: "list",
+            name: "calendar",
+            message: "Which calendar has Timav tracking data?",
+            choices: list.data.items.map(prop("summary")),
+          },
         ])
-        .then(({ calendar }) => callback(list.items.find(item => item.summary === calendar)));
-    }
+        .then(({ calendar }) =>
+          callback(list.data.items.find((item) => item.summary === calendar))
+        );
+    },
   });
 };
 
-module.exports = callback => {
-  fs.readFile('client_secret.json', (err, content) => {
+module.exports = (callback) => {
+  fs.readFile("client_secret.json", (err, content) => {
     if (err) {
-      console.log('Error loading client secret file: ' + err);
+      console.log("Error loading client secret file: " + err);
       return;
     }
 
-    authorize(JSON.parse(content), auth => {
+    authorize(JSON.parse(content), (auth) => {
       chooseCalendar({
         auth,
-        callback: calendar => {
+        callback: (calendar) => {
           callback({ auth, calendar });
-        }
+        },
       });
     });
   });
 };
 
-process.on('unhandledRejection', error => console.error(error.stack));
+process.on("unhandledRejection", (error) => console.error(error.stack));

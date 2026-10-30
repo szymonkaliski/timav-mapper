@@ -1,8 +1,8 @@
 {
   "dependencies": {
     "async": "^3.2.5",
+    "env-paths": "^2.2.1",
     "google-auth-library": "^9.13.0",
-    "googleapis": "^140.0.1",
-    "inquirer": "^10.1.6"
+    "googleapis": "^140.0.1"
   }
 }

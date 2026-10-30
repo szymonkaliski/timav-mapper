@@ -9,3 +9,5 @@ events*.json*
 
 .credentials.json
 client_secret.json
+*token*.json
+*credentials*.json

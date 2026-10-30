@@ -1,113 +1,147 @@
+const envPaths = require("env-paths");
 const fs = require("fs");
+const path = require("path");
+const readline = require("readline");
 const { google } = require("googleapis");
 const { OAuth2Client } = require("google-auth-library");
-const { default: inquirer } = require("inquirer");
-const readline = require("readline");
-
-const prop = (key) => (obj) => obj[key];
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
-const TOKEN_PATH = ".credentials.json";
 
-const storeToken = (token) => {
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(token));
-  console.log("Token stored to " + TOKEN_PATH);
+const CONFIG_PATH = envPaths("timav").config;
+const DATA_PATH = envPaths("timav").data;
+
+const CREDENTIALS_PATH = path.join(CONFIG_PATH, "credentials.json");
+const CONFIG_FILE_PATH = path.join(CONFIG_PATH, "config.json");
+
+const tokenPath = (calendar) => path.join(DATA_PATH, `${calendar}-token.json`);
+
+// strip sensitive request details (refresh_token, client_secret, auth headers) from gaxios/googleapis errors before logging
+const sanitizeError = (err) => {
+  if (!err || typeof err !== "object") {
+    return err;
+  }
+
+  const safe = {
+    message: err.message,
+    code: err.code,
+    errno: err.errno,
+    stack: err.stack,
+  };
+
+  if (err.response) {
+    safe.response = {
+      status: err.response.status,
+      statusText: err.response.statusText,
+      data: err.response.data,
+    };
+  }
+
+  return safe;
 };
 
-const getNewToken = (oauth2Client, callback) => {
+const storeToken = ({ calendar }, token) => {
+  const fileName = tokenPath(calendar);
+
+  fs.writeFileSync(fileName, JSON.stringify(token, null, 2));
+  console.log("Token stored in: " + fileName);
+};
+
+const getNewToken = ({ calendar }, oauth2Client, callback) => {
+  if (!process.stdin.isTTY) {
+    return callback(
+      new Error(
+        `no stored token for "${calendar}" and cannot prompt non-interactively; run \`timav cache\` in a terminal to authorize`
+      )
+    );
+  }
+
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
   });
 
-  console.log("Authorize this app by visiting this url: ", authUrl);
+  console.log("Authorize this app by visiting this url:", authUrl);
+  console.log("After authorizing, you'll be redirected to localhost (which won't load).");
+  console.log("Copy the full URL (or just the 'code' parameter) from the URL bar and paste it below.");
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
-  rl.question("Enter the code from that page here: ", (code) => {
+  rl.question("Paste the URL or code here: ", (input) => {
     rl.close();
+
+    let code = input.trim();
+    try {
+      const url = new URL(code);
+      code = url.searchParams.get("code") || code;
+    } catch (_) {}
 
     oauth2Client.getToken(code, (err, token) => {
       if (err) {
-        console.log("Error while trying to retrieve access token", err);
-        return;
+        console.error("Error while trying to retrieve access token", sanitizeError(err));
+        return callback(err);
       }
+
       oauth2Client.credentials = token;
-      storeToken(token);
-      callback(oauth2Client);
+
+      storeToken({ calendar }, token);
+      callback(null, oauth2Client);
     });
   });
 };
 
-const authorize = (credentials, callback) => {
+const authorize = ({ calendar }, credentials, callback) => {
   const clientSecret = credentials.installed.client_secret;
   const clientId = credentials.installed.client_id;
-  const redirectUrl = credentials.installed.redirect_uris[0];
+  const redirectUrl = "http://localhost";
 
   const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUrl);
 
-  fs.readFile(TOKEN_PATH, (err, token) => {
+  fs.readFile(tokenPath(calendar), (err, token) => {
     if (err) {
-      getNewToken(oauth2Client, callback);
+      getNewToken({ calendar }, oauth2Client, callback);
     } else {
       oauth2Client.credentials = JSON.parse(token);
-      callback(oauth2Client);
+      callback(null, oauth2Client);
     }
   });
 };
 
-const getCalendars = ({ auth, callback }) => {
+const getCalendars = (auth, callback) => {
   const calendar = google.calendar("v3");
-
-  const config = { auth };
-
-  calendar.calendarList.list(config, callback);
-};
-
-const chooseCalendar = ({ auth, callback }) => {
-  getCalendars({
-    auth,
-    callback: (err, list) => {
-      if (err) {
-        console.error(err);
-        process.exit(1);
-      }
-
-      inquirer
-        .prompt([
-          {
-            type: "list",
-            name: "calendar",
-            message: "Which calendar has Timav tracking data?",
-            choices: list.data.items.map(prop("summary")),
-          },
-        ])
-        .then(({ calendar }) =>
-          callback(list.data.items.find((item) => item.summary === calendar))
-        );
-    },
-  });
+  calendar.calendarList.list({ auth }, callback);
 };
 
 module.exports = (callback) => {
-  fs.readFile("client_secret.json", (err, content) => {
+  const config = require(CONFIG_FILE_PATH);
+  const credentials = require(CREDENTIALS_PATH);
+
+  authorize({ calendar: config.calendar }, credentials, (err, auth) => {
     if (err) {
-      console.log("Error loading client secret file: " + err);
-      return;
+      console.error(sanitizeError(err));
+      process.exit(1);
     }
 
-    authorize(JSON.parse(content), (auth) => {
-      chooseCalendar({
-        auth,
-        callback: (calendar) => {
-          callback({ auth, calendar });
-        },
-      });
+    getCalendars(auth, (err, res) => {
+      if (err) {
+        console.error(sanitizeError(err));
+        process.exit(1);
+      }
+
+      const calendar = res.data.items.find(
+        ({ summary }) => summary === config.calendar
+      );
+
+      if (!calendar) {
+        console.error("Error: no matching calendar found");
+        process.exit(1);
+      }
+
+      callback({ auth, calendar });
     });
   });
 };
 
-process.on("unhandledRejection", (error) => console.error(error.stack));
+process.on("unhandledRejection", (error) => console.error(sanitizeError(error)));
